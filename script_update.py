@@ -1,4 +1,3 @@
-cat > script_update.py << 'ENDOFFILE'
 #!/usr/bin/env python3
 import os
 import sys

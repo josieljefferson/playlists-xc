@@ -1,4 +1,3 @@
-cat > m3u_processor.py << 'ENDOFFILE'
 #!/usr/bin/env python3
 import os
 import re
