@@ -9,7 +9,7 @@ on:
     paths:
       - "*.m3u"
       - "*.m3u8"
-      - "app/**/*.py"
+      - "*.py"
       - "requirements.txt"
 
 permissions:
@@ -22,7 +22,7 @@ jobs:
     
     env:
       PIP_CACHE_DIR: ~/.cache/pip
-      PYTHONPATH: ${{ github.workspace }}  # ✅ Importante para imports
+      PYTHONPATH: ${{ github.workspace }}
     
     steps:
       - name: 📦 Clonar repositório
@@ -37,75 +37,49 @@ jobs:
           python-version: "3.11"
           cache: "pip"
 
+      - name: 🔍 Verificar estrutura
+        run: |
+          echo "📁 Conteúdo do repositório:"
+          ls -la
+          echo "📁 Arquivos Python:"
+          ls -la *.py 2>/dev/null || echo "Nenhum .py na raiz"
+
       - name: 📦 Instalar dependências
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: 🔄 Rodar atualização
-        run: python run_update.py
-
-      - name: 🔍 Verificar estrutura de arquivos
-        run: |
-          echo "📁 Conteúdo do repositório:"
-          ls -la
-          echo "📁 Pasta app/:"
-          ls -la app/ 2>/dev/null || echo "⚠️ app/ não encontrada"          echo "📁 Raiz - scripts Python:"
-          ls -la *.py 2>/dev/null || echo "⚠️ Nenhum .py na raiz"
-
       - name: 🔄 Rodar script de atualização
-        run: |
-          # ✅ Tentar executar na ordem de preferência:
-          if [ -f "script_update.py" ]; then
-            echo "✅ Executando script_update.py da raiz"
-            python script_update.py
-          elif [ -f "app/script_update.py" ]; then
-            echo "✅ Executando app/script_update.py"
-            python -m app.script_update
-          elif [ -f "run_update.py" ]; then
-            echo "✅ Executando run_update.py"
-            python run_update.py
-          else
-            echo "❌ Nenhum script de atualização encontrado!"
-            echo "🔍 Arquivos .py disponíveis:"
-            find . -name "*.py" -type f
-            exit 1
-          fi
+        run: python script_update.py
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: 📝 Adicionar timestamp na playlist
-        if: always()
+      - name: 📝 Adicionar timestamp
         run: |
           FILE="docs/playlists.m3u"
           if [ -f "$FILE" ]; then
-            # Remover timestamp antigo
             sed -i '/# 🔄 Atualizado em/d' "$FILE"
-            # Adicionar novo
             echo "" >> "$FILE"
             echo "# 🔄 Atualizado em $(TZ='America/Fortaleza' date '+%d/%m/%Y - %H:%M:%S') BRT" >> "$FILE"
-            echo "✅ Timestamp adicionado"
-          else
-            echo "⚠️ Playlist não gerada: $FILE"
           fi
 
-      - name: 🔍 Verificar mudanças no Git
+      - name: 🔍 Verificar mudanças
         id: git-check
         run: |
           git add .
           if git diff --staged --quiet --exit-code; then
             echo "changes=false" >> $GITHUB_OUTPUT
-            echo "✅ Sem alterações para commit"
+            echo "✅ Sem alterações"
           else
             echo "changes=true" >> $GITHUB_OUTPUT
-            echo "✅ Alterações detectadas:"
-            git diff --staged --name-only          fi
+            echo "✅ Alterações detectadas"
+          fi
 
-      - name: 💾 Commit e push automático
+      - name: 💾 Commit automático
         if: steps.git-check.outputs.changes == 'true'
         run: |
           git config --global user.name "iptv-bot"
-          git config --global user.email "bot@iptv-system.ondigitalocean.app"
+          git config --global user.email "bot@iptv-system.app"
           git commit -m "🔄 update: playlists $(date '+%Y-%m-%d %H:%M') BRT [skip ci]"
           git push
         env:
