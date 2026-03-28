@@ -2,95 +2,111 @@ name: IPTV Auto Update
 
 on:
   schedule:
-    - cron: "0 */6 * * *"  # A cada 6 horas
-  workflow_dispatch:      # Execução manual
+    - cron: "0 */6 * * *"
+  workflow_dispatch:
   push:
     branches: [main]
     paths:
       - "*.m3u"
       - "*.m3u8"
-      - "script_update.py"
+      - "app/**/*.py"
+      - "requirements.txt"
 
 permissions:
   contents: write
-  actions: read
 
 jobs:
   update:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     
-    # ✅ Cache para dependências
     env:
       PIP_CACHE_DIR: ~/.cache/pip
+      PYTHONPATH: ${{ github.workspace }}  # ✅ Importante para imports
     
     steps:
       - name: 📦 Clonar repositório
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: 🐍 Configurar Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-          cache: "pip"  # ✅ Cache automático do pip
-
-      - name: ⬇️ Restaurar cache de downloads
-        uses: actions/cache@v4
-        with:
-          path: downloads/
-          key: ${{ runner.os }}-m3u-${{ hashFiles('**/*.m3u') }}
-          restore-keys: |
-            ${{ runner.os }}-m3u-
+          cache: "pip"
 
       - name: 📦 Instalar dependências
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: 🔄 Rodar atualização
+        run: python run_update.py
+
+      - name: 🔍 Verificar estrutura de arquivos
+        run: |
+          echo "📁 Conteúdo do repositório:"
+          ls -la
+          echo "📁 Pasta app/:"
+          ls -la app/ 2>/dev/null || echo "⚠️ app/ não encontrada"          echo "📁 Raiz - scripts Python:"
+          ls -la *.py 2>/dev/null || echo "⚠️ Nenhum .py na raiz"
+
       - name: 🔄 Rodar script de atualização
-        run: python script_update.py
+        run: |
+          # ✅ Tentar executar na ordem de preferência:
+          if [ -f "script_update.py" ]; then
+            echo "✅ Executando script_update.py da raiz"
+            python script_update.py
+          elif [ -f "app/script_update.py" ]; then
+            echo "✅ Executando app/script_update.py"
+            python -m app.script_update
+          elif [ -f "run_update.py" ]; then
+            echo "✅ Executando run_update.py"
+            python run_update.py
+          else
+            echo "❌ Nenhum script de atualização encontrado!"
+            echo "🔍 Arquivos .py disponíveis:"
+            find . -name "*.py" -type f
+            exit 1
+          fi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: 📝 Adicionar timestamp na playlist
+        if: always()
         run: |
           FILE="docs/playlists.m3u"
           if [ -f "$FILE" ]; then
-            # Remove timestamp antigo se existir
+            # Remover timestamp antigo
             sed -i '/# 🔄 Atualizado em/d' "$FILE"
-            # Adiciona novo timestamp
-            echo -e "\n# 🔄 Atualizado em $(TZ='America/Fortaleza' date '+%d/%m/%Y - %H:%M:%S') BRT" >> "$FILE"
+            # Adicionar novo
+            echo "" >> "$FILE"
+            echo "# 🔄 Atualizado em $(TZ='America/Fortaleza' date '+%d/%m/%Y - %H:%M:%S') BRT" >> "$FILE"
+            echo "✅ Timestamp adicionado"
+          else
+            echo "⚠️ Playlist não gerada: $FILE"
           fi
 
-      - name: 🔍 Verificar mudanças antes de commit
+      - name: 🔍 Verificar mudanças no Git
         id: git-check
         run: |
           git add .
-          if git diff --staged --quiet; then
+          if git diff --staged --quiet --exit-code; then
             echo "changes=false" >> $GITHUB_OUTPUT
             echo "✅ Sem alterações para commit"
           else
             echo "changes=true" >> $GITHUB_OUTPUT
-            echo "✅ Alterações detectadas"
-          fi
+            echo "✅ Alterações detectadas:"
+            git diff --staged --name-only          fi
 
-      - name: 💾 Commit automático (apenas se houver mudanças)
+      - name: 💾 Commit e push automático
         if: steps.git-check.outputs.changes == 'true'
         run: |
           git config --global user.name "iptv-bot"
-          git config --global user.email "bot@playlists-xc.ondigitalocean.app"
+          git config --global user.email "bot@iptv-system.ondigitalocean.app"
           git commit -m "🔄 update: playlists $(date '+%Y-%m-%d %H:%M') BRT [skip ci]"
           git push
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: 🚀 Trigger deploy no Render (opcional)
-        if: steps.git-check.outputs.changes == 'true'
-        run: |
-          curl -X POST "https://api.render.com/v1/services/${{ secrets.RENDER_SERVICE_ID }}/deploys" \
-            -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
-            -H "Content-Type: application/json" \
-            -d '{"clearCache": true}'
-        continue-on-error: true
