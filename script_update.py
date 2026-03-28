@@ -10,21 +10,17 @@ import json
 import requests
 from datetime import datetime
 
-# ✅ Import do processador (mesma pasta)
 from m3u_processor import processar_lista
 
-# 📁 Configurações de paths
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PASTA_DOWNLOAD = os.path.join(SCRIPT_DIR, "downloads")
 PASTA_OUTPUT = os.path.join(SCRIPT_DIR, "docs")
-API_REPO = "https://api.github.com/repos/josieljefferson/iptv-system/contents/"
+API_REPO = "https://api.github.com/repos/josieljefferson/playlists-xc/contents/"
 
-# 🚫 Arquivos ignorados
 IGNORAR = {"requirements.txt", ".gitkeep", "README.md", ".gitignore"}
 
-# 🌐 Headers para requests
 HEADERS = {
-    "User-Agent": "IPTV-System/2.0 (GitHub Actions)",
+    "User-Agent": "playlists-xc/2.0 (GitHub Actions)",
     "Accept": "application/vnd.github.v3+json",
 }
 if os.getenv("GITHUB_TOKEN"):
@@ -41,19 +37,17 @@ def listar_arquivos_m3u():
         urls = []
         for item in items:
             nome = item.get("name", "")
-            # Ignorar arquivos não desejados
             if nome in IGNORAR:
                 continue
-            # Aceitar apenas listas IPTV
             if nome.endswith((".m3u", ".m3u8", ".txt")):
                 download_url = item.get("download_url")
-                if download_url:                    urls.append(download_url)
+                if download_url:
+                    urls.append(download_url)
                     print(f"✅ Encontrado: {nome}")
         return urls
     except Exception as e:
         print(f"❌ Erro ao listar arquivos: {e}")
         return []
-
 
 def baixar_arquivos(urls):
     """Baixa arquivos M3U para pasta local"""
@@ -82,7 +76,7 @@ def baixar_arquivos(urls):
     return baixados
 
 
-def gerar_metadata(canais: list, usuario: str = "system"):
+def gerar_metadata(canais, usuario="system"):
     """Gera arquivo JSON com metadados da playlist"""
     metadata = {
         "gerado_em": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
@@ -96,24 +90,21 @@ def gerar_metadata(canais: list, usuario: str = "system"):
     caminho = os.path.join(PASTA_OUTPUT, "metadata.json")
     with open(caminho, "w", encoding="utf-8") as f:
         json.dump(metadata, f, indent=2, ensure_ascii=False)
-        return metadata
+    
+    return metadata
 
 
 def main():
     print("🚀 Iniciando atualização IPTV System...")
-    print(f"📁 Diretório: {SCRIPT_DIR}")
-    
-    # ✅ Criar pastas
+    print(f"📁 Diretório: {SCRIPT_DIR}")    
     os.makedirs(PASTA_DOWNLOAD, exist_ok=True)
     os.makedirs(PASTA_OUTPUT, exist_ok=True)
     
-    # 📋 Listar e baixar arquivos
     print("\n🔍 Buscando arquivos M3U...")
     urls = listar_arquivos_m3u()
     
     if not urls:
         print("⚠️ Nenhum arquivo M3U encontrado para processar")
-        # Criar playlist vazia válida para não quebrar o sistema
         with open(os.path.join(PASTA_OUTPUT, "playlists.m3u"), "w", encoding="utf-8") as f:
             f.write('#EXTM3U url-tvg=""\n# ⚠️ Nenhuma fonte disponível no momento\n')
         return 0
@@ -125,7 +116,6 @@ def main():
         print("❌ Falha ao baixar arquivos. Abortando.")
         return 1
     
-    # 🔄 Processar playlists
     print("\n🔄 Processando playlists...")
     try:
         canais = processar_lista(PASTA_DOWNLOAD, PASTA_OUTPUT, usuario="github-actions")
@@ -134,18 +124,17 @@ def main():
         print(f"❌ Erro ao processar: {e}")
         return 1
     
-    # 📊 Gerar metadados
     print("\n📊 Gerando metadados...")
     meta = gerar_metadata(canais)
     print(f"📦 Grupos encontrados: {', '.join(meta['grupos'][:5])}")
     
-    # ✅ Resumo final
-    print("\n" + "="*50)
+    print("\n" + "=" * 50)
     print("✅ ATUALIZAÇÃO CONCLUÍDA")
     print(f"📺 Canais: {meta['total_canais']}")
     print(f"📁 Saída: {PASTA_OUTPUT}/playlists.m3u")
     print(f"🕐 Gerado em: {meta['gerado_em']}")
-    print("="*50)    
+    print("=" * 50)
+    
     return 0
 
 
